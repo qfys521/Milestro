@@ -2,6 +2,8 @@ set(MILESTRO_UNITY_RENDER_PAYLOAD_TEST_NAME "MilestroTest_UnityRenderPayload")
 
 add_executable(${MILESTRO_UNITY_RENDER_PAYLOAD_TEST_NAME}
         src/test_unity_render_diagnostics.cpp
+        src/test_unity_render_gl_state.cpp
+        src/test_unity_render_atomic.cpp
         src/test_unity_render_payload.cpp
         src/test_unity_render_transform.cpp
         src/test_unity_render_vulkan_lifecycle.cpp)

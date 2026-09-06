@@ -2,6 +2,7 @@
 
 #include "game/milestro_game_retcode.h"
 #include "unity_render/MilestroUnityGraphicsBackend.h"
+#include "unity_render/MilestroUnityRenderAtomic.h"
 #include "unity_render/MilestroUnityRenderDiagnostics.h"
 #include "unity_render/MilestroUnityRenderSubmission.h"
 #include "unity_render/MilestroUnityRenderSubmissionDraw.h"
@@ -121,8 +122,7 @@ void MarkSubmissionCompleted(MilestroUnityRenderSubmission* submission,
     }
 
     ReleaseSubmissionOwnedResources(submission);
-    std::atomic_ref<int32_t> completed(submission->completed);
-    completed.store(static_cast<int32_t>(status), std::memory_order_release);
+    AtomicStoreRelease(submission->completed, static_cast<int32_t>(status));
 }
 
 bool IsSameRenderTarget(const MilestroUnityRenderSubmission* lhs, const MilestroUnityRenderSubmission* rhs) {
@@ -170,8 +170,7 @@ void MarkDrainCompleted(MilestroUnityRenderDrain* drain, int32_t value = 1) {
         return;
     }
 
-    std::atomic_ref<int32_t> completed(drain->completed);
-    completed.store(value, std::memory_order_release);
+    AtomicStoreRelease(drain->completed, value);
 }
 
 #if defined(MILESTRO_ENABLE_UNITY_VULKAN_RENDER)
@@ -217,13 +216,8 @@ void CompleteDirectDrain(DirectDrainRegistration& registration, bool submit) {
         ForgetDirectDrain(registration);
         return;
     }
-
-    std::atomic_ref<int32_t> phase(drain->phase);
     int32_t expected = kDirectDrainPhasePrepared;
-    if (!phase.compare_exchange_strong(expected,
-                                       kDirectDrainPhaseCompleted,
-                                       std::memory_order_acq_rel,
-                                       std::memory_order_acquire)) {
+    if (!AtomicCompareExchangeAcquireRelease(drain->phase, expected, kDirectDrainPhaseCompleted)) {
         vulkan::FailDirectPrepared(registration.batchToken, MarkSubmissionCompleted);
         MarkDrainCompleted(drain);
         ForgetDirectDrain(registration);
@@ -279,12 +273,8 @@ void CompleteOrphanedDirectDrains() {
         if (registration.batchToken != 0 && !vulkan::HasDirectBatch(registration.batchToken)) {
             MilestroUnityRenderDrain* drain = registration.drain;
             if (drain != nullptr) {
-                std::atomic_ref<int32_t> phase(drain->phase);
                 int32_t expected = kDirectDrainPhasePrepared;
-                phase.compare_exchange_strong(expected,
-                                              kDirectDrainPhaseCompleted,
-                                              std::memory_order_acq_rel,
-                                              std::memory_order_acquire);
+                AtomicCompareExchangeAcquireRelease(drain->phase, expected, kDirectDrainPhaseCompleted);
                 MarkDrainCompleted(drain);
             }
             ForgetDirectDrain(registration);
@@ -645,12 +635,8 @@ void DrainRenderQueue(int eventOffset, MilestroUnityRenderDrain* drain) {
 
 #if defined(MILESTRO_ENABLE_UNITY_VULKAN_RENDER)
     if (eventOffset == kVulkanDirectPrepareEventOffset) {
-        std::atomic_ref<int32_t> phase(drain->phase);
         int32_t expected = kDirectDrainPhaseCreated;
-        if (!phase.compare_exchange_strong(expected,
-                                           kDirectDrainPhasePreparing,
-                                           std::memory_order_acq_rel,
-                                           std::memory_order_acquire)) {
+        if (!AtomicCompareExchangeAcquireRelease(drain->phase, expected, kDirectDrainPhasePreparing)) {
             return;
         }
 
@@ -663,7 +649,7 @@ void DrainRenderQueue(int eventOffset, MilestroUnityRenderDrain* drain) {
             for (MilestroUnityRenderSubmission* submission: submissions) {
                 MarkSubmissionCompleted(submission, MilestroUnityRenderSubmissionStatus::Failed);
             }
-            phase.store(kDirectDrainPhaseCompleted, std::memory_order_release);
+            AtomicStoreRelease(drain->phase, kDirectDrainPhaseCompleted);
             MarkDrainCompleted(drain);
             return;
         }
@@ -672,17 +658,17 @@ void DrainRenderQueue(int eventOffset, MilestroUnityRenderDrain* drain) {
         }
         if (!vulkan::FinishDirectBatchPrepare(drain->batchToken)) {
             vulkan::FailDirectPrepared(drain->batchToken, MarkSubmissionCompleted);
-            phase.store(kDirectDrainPhaseCompleted, std::memory_order_release);
+            AtomicStoreRelease(drain->phase, kDirectDrainPhaseCompleted);
             MarkDrainCompleted(drain);
             return;
         }
         if (!RegisterDirectDrain(drain)) {
             vulkan::FailDirectPrepared(drain->batchToken, MarkSubmissionCompleted);
-            phase.store(kDirectDrainPhaseCompleted, std::memory_order_release);
+            AtomicStoreRelease(drain->phase, kDirectDrainPhaseCompleted);
             MarkDrainCompleted(drain);
             return;
         }
-        phase.store(kDirectDrainPhasePrepared, std::memory_order_release);
+        AtomicStoreRelease(drain->phase, kDirectDrainPhasePrepared);
         return;
     }
 
@@ -699,15 +685,10 @@ void DrainRenderQueue(int eventOffset, MilestroUnityRenderDrain* drain) {
             }
             return;
         }
-
-        std::atomic_ref<int32_t> phase(drain->phase);
         int32_t expected = kDirectDrainPhasePrepared;
-        if (!phase.compare_exchange_strong(expected,
-                                           kDirectDrainPhaseCompleted,
-                                           std::memory_order_acq_rel,
-                                           std::memory_order_acquire)) {
+        if (!AtomicCompareExchangeAcquireRelease(drain->phase, expected, kDirectDrainPhaseCompleted)) {
             if (expected == kDirectDrainPhaseCreated || expected == kDirectDrainPhasePreparing) {
-                phase.store(kDirectDrainPhaseCompleted, std::memory_order_release);
+                AtomicStoreRelease(drain->phase, kDirectDrainPhaseCompleted);
                 vulkan::FailDirectPrepared(drain->batchToken, MarkSubmissionCompleted);
                 std::vector<MilestroUnityRenderSubmission*> submissions =
                         DrainQueuedSubmissions(drain->graphicsBackend, drain->vulkanBackend);
