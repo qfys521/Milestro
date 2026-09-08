@@ -770,7 +770,7 @@ void DrainRenderQueue(int eventOffset, MilestroUnityRenderDrain* drain) {
             MarkDrainCompleted(drain);
             return;
         }
-        phase.store(kDirectDrainPhasePrepared, std::memory_order_release);
+        AtomicStoreRelease(drain->phase, kDirectDrainPhasePrepared);
         return;
     }
 
