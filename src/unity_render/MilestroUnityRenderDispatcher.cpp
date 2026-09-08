@@ -1,7 +1,7 @@
 #include "unity_render/MilestroUnityRenderDispatcher.h"
 
 #include "game/milestro_game_retcode.h"
-#include "unity_render/MilestroUnityGraphicsBackend.h"
+#include "unity_render/MilestroUnityGraphicsBackend.h"`r`n#include "unity_render/MilestroUnityRenderAtomic.h"
 #include "unity_render/MilestroUnityRenderDiagnostics.h"
 #include "unity_render/MilestroUnityRenderSubmission.h"
 #include "unity_render/MilestroUnityRenderSubmissionDraw.h"
