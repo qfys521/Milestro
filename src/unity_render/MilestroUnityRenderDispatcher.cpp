@@ -352,8 +352,6 @@ void CompleteOrphanedDirectDrains() {
     }
 }
 
-std::vector<MilestroUnityRenderSubmission*> DrainQueuedSubmissions(int32_t graphicsBackend, int32_t vulkanBackend);
-
 void SubmitDirectTicket(uint64_t batchToken) {
     if (batchToken == 0) {
         return;
@@ -369,13 +367,10 @@ void SubmitDirectTicket(uint64_t batchToken) {
     if (HasDirectSubmitToken(gEarlyDirectSubmitTokens, batchToken)) {
         return;
     }
+    // An unknown ticket may be early, or retired and evicted from the bounded history.
+    // It owns no queued submissions: only a matching prepare may consume the early
+    // marker and fail its batch. Never let a stale submit drain another batch's work.
     RememberDirectSubmitToken(gEarlyDirectSubmitTokens, batchToken);
-    std::vector<MilestroUnityRenderSubmission*> submissions =
-            DrainQueuedSubmissions(static_cast<int32_t>(MilestroUnityGraphicsBackend::Vulkan),
-                                   static_cast<int32_t>(vulkan::VulkanBackendKind::Direct));
-    for (MilestroUnityRenderSubmission* submission: submissions) {
-        MarkSubmissionCompleted(submission, MilestroUnityRenderSubmissionStatus::Failed);
-    }
 }
 #endif
 
